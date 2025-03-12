@@ -1,0 +1,259 @@
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Scanner;
+
+class TaskNode {
+    int id;
+    String desc;
+    int prio;
+    int time; // Hours the person has had the issue
+    String skill;
+    String doctor;
+    String day; // Monday to Sunday
+    TaskNode next;
+
+    public TaskNode(int id, String desc, int prio, int time, String skill, String doctor, String day) {
+        this.id = id;
+        this.desc = desc;
+        this.prio = prio;
+        this.time = time;
+        this.skill = skill;
+        this.doctor = doctor;
+        this.day = day;
+        this.next = null;
+    }
+}
+
+class TaskList {
+    TaskNode start;
+
+    public TaskList() {
+        start = null;
+    }
+
+    public void addTask(int id, String desc, int prio, int time, String skill, String doctor, String day) {
+        TaskNode newTask = new TaskNode(id, desc, prio, time, skill, doctor, day);
+        if (start == null || prio < start.prio) {
+            newTask.next = start;
+            start = newTask;
+        } else {
+            TaskNode temp = start;
+            while (temp.next != null && temp.next.prio <= prio) {
+                temp = temp.next;
+            }
+            newTask.next = temp.next;
+            temp.next = newTask;
+        }
+    }
+
+    public void deleteTask(int id) {
+        if (start == null) {
+            System.out.println("No tasks!");
+            return;
+        }
+        if (start.id == id) {
+            start = start.next;
+            System.out.println("Task " + id + " deleted!");
+            return;
+        }
+        TaskNode temp = start;
+        while (temp.next != null && temp.next.id != id) {
+            temp = temp.next;
+        }
+        if (temp.next != null) {
+            temp.next = temp.next.next;
+            System.out.println("Task " + id + " deleted!");
+        } else {
+            System.out.println("Task " + id + " not found!");
+        }
+    }
+
+    public TaskNode findTask(int id) {
+        TaskNode temp = start;
+        while (temp != null) {
+            if (temp.id == id) {
+                return temp;
+            }
+            temp = temp.next;
+        }
+        return null;
+    }
+
+    public void showTasks(String day) {
+        TaskNode temp = start;
+        System.out.println("\nTasks for " + day + ":");
+        boolean found = false;
+        while (temp != null) {
+            if (temp.day.equalsIgnoreCase(day)) {
+                System.out.println("ID " + temp.id + ": " + temp.desc + ", Prio " + temp.prio + ", Dr. " + temp.doctor + ", Had issue for " + temp.time + " hours");
+                found = true;
+            }
+            temp = temp.next;
+        }
+        if (!found) {
+            System.out.println("Nothing scheduled!");
+        }
+    }
+}
+
+class Robot {
+    String name;
+    ArrayList<String> skills;
+
+    public Robot(String name, String[] skills) {
+        this.name = name;
+        this.skills = new ArrayList<>(Arrays.asList(skills));
+    }
+
+    public boolean canDo(String skill) {
+        return skills.contains(skill);
+    }
+
+    public boolean takeTask(TaskNode task) {
+        return canDo(task.skill); // Only checks skill
+    }
+}
+
+class Scheduler {
+    TaskList tasks;
+    ArrayList<Robot> robots;
+    ArrayList<String> doctors;
+    int taskCount;
+
+    public Scheduler() {
+        tasks = new TaskList();
+        robots = new ArrayList<>();
+        doctors = new ArrayList<>(Arrays.asList("Dr. Amit", "Dr. Priya"));
+        taskCount = 0;
+    }
+
+    public void addRobot(String name, String[] skills) {
+        robots.add(new Robot(name, skills));
+        System.out.println("Robot " + name + " added with skills " + Arrays.toString(skills));
+    }
+
+    public void removeRobot(String name) {
+        for (int i = 0; i < robots.size(); i++) {
+            if (robots.get(i).name.equals(name)) {
+                robots.remove(i);
+                System.out.println("Robot " + name + " removed!");
+                return;
+            }
+        }
+        System.out.println("Robot not found!");
+    }
+
+    public void addDoctor(String name) {
+        if (!doctors.contains(name)) {
+            doctors.add(name);
+            System.out.println("Dr. " + name + " added!");
+        }
+    }
+
+    public void removeDoctor(String name) {
+        if (doctors.contains(name)) {
+            doctors.remove(name);
+            System.out.println("Dr. " + name + " removed!");
+        } else {
+            System.out.println("Doctor not found!");
+        }
+    }
+
+    public void addTask(String desc, int prio, int time, String skill, String doctor, String day) {
+        if (!doctors.contains(doctor)) {
+            System.out.println("Doctor not found!");
+            return;
+        }
+        taskCount++;
+        tasks.addTask(taskCount, desc, prio, time, skill, doctor, day);
+    }
+
+    public void deleteTask(int id) {
+        tasks.deleteTask(id);
+    }
+
+    public void assignRobotToTask(int taskId) {
+        TaskNode task = tasks.findTask(taskId);
+        if (task == null) {
+            System.out.println("Task " + taskId + " not found!");
+            return;
+        }
+        for (Robot robot : robots) {
+            if (robot.takeTask(task)) {
+                System.out.println(robot.name + " took Task " + taskId);
+                tasks.deleteTask(taskId); // Remove task after assignment
+                return;
+            }
+        }
+        System.out.println("No robot available with skill " + task.skill + "!");
+    }
+
+    public void showDay(String day) {
+        tasks.showTasks(day);
+    }
+}
+
+public class MedicalScheduler {
+    public static void main(String[] args) {
+        Scheduler s = new Scheduler();
+        s.addRobot("Robo1", new String[]{"surgery"});
+        s.addRobot("Robo2", new String[]{"checkup"});
+        s.addRobot("Robo3", new String[]{"Testing"});
+
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.println("\n1. Add Task\n2. Delete Task\n3. Run Robot\n4. Show Day\n5. Add/Remove Robot\n6. Add/Remove Doctor\n7. Exit");
+            System.out.print("Wat u wanna do? ");
+            String choice = scanner.nextLine();
+            switch (choice) {
+                case "1":
+                    System.out.print("Task: "); String desc = scanner.nextLine();
+                    System.out.print("Priority (1-5): "); int prio = Integer.parseInt(scanner.nextLine());
+                    System.out.print("Time (hours had issue): "); int time = Integer.parseInt(scanner.nextLine());
+                    System.out.print("Skill (surgery/checkup): "); String skill = scanner.nextLine();
+                    System.out.print("Doctor: "); String doctor = scanner.nextLine();
+                    System.out.print("Day (Monday-Sunday): "); String day = scanner.nextLine();
+                    s.addTask(desc, prio, time, skill, doctor, day);
+                    break;
+                case "2":
+                    System.out.print("Task ID: "); int id = Integer.parseInt(scanner.nextLine());
+                    s.deleteTask(id);
+                    break;
+                case "3":
+                    System.out.print("Task ID to assign to robot: "); int taskId = Integer.parseInt(scanner.nextLine());
+                    s.assignRobotToTask(taskId);
+                    break;
+                case "4":
+                    System.out.print("Day (Monday-Sunday): "); String showDay = scanner.nextLine();
+                    s.showDay(showDay);
+                    break;
+                case "5":
+                    System.out.print("Add or Remove Robot? (a/r): "); String robotAction = scanner.nextLine();
+                    if (robotAction.equals("a")) {
+                        System.out.print("Robot name: "); String name = scanner.nextLine();
+                        System.out.print("Skills (e.g., surgery,checkup): "); String[] skills = scanner.nextLine().split(",");
+                        s.addRobot(name, skills);
+                    } else if (robotAction.equals("r")) {
+                        System.out.print("Robot name: "); String rName = scanner.nextLine();
+                        s.removeRobot(rName);
+                    }
+                    break;
+                case "6":
+                    System.out.print("Add or Remove Doctor? (a/r): "); String doctorAction = scanner.nextLine();
+                    if (doctorAction.equals("a")) {
+                        System.out.print("Doctor name: "); String dName = scanner.nextLine();
+                        s.addDoctor(dName);
+                    } else if (doctorAction.equals("r")) {
+                        System.out.print("Doctor name: "); String drName = scanner.nextLine();
+                        s.removeDoctor(drName);
+                    }
+                    break;
+                case "7":
+                    scanner.close();
+                    return;
+                default:
+                    System.out.println("1-7 only!");
+            }
+        }
+    }
+}
