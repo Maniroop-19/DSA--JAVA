@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Task Scheduler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .section { transition: opacity 0.3s ease-in-out; }
+        .section.hidden { opacity: 0; height: 0; overflow: hidden; }
+        .section:not(.hidden) { opacity: 1; height: auto; }
+        .invalid { border-color: red; }
+        .error-message { color: red; font-size: 0.875rem; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex min-h-screen">
+        <!-- Sidebar -->
+        <div class="bg-gray-800 text-white w-64 p-4 flex-shrink-0">
+            <h2 class="text-2xl font-bold mb-6">Task Scheduler</h2>
+            <nav>
+                <button onclick="showSection('add-task')" class="block w-full text-left py-2 px-4 mb-2 bg-blue-600 hover:bg-blue-700 rounded">Add Task</button>
+                <button onclick="scheduler.processTask()" class="block w-full text-left py-2 px-4 mb-2 bg-green-600 hover:bg-green-700 rounded">Process Task</button>
+                <button onclick="scheduler.assignRobotToTask()" class="block w-full text-left py-2 px-4 mb-2 bg-purple-600 hover:bg-purple-700 rounded">Assign Robot</button>
+                <button onclick="showSection('show-schedule')" class="block w-full text-left py-2 px-4 mb-2 bg-teal-600 hover:bg-teal-700 rounded">Show Schedule</button>
+                <button onclick="showSection('manage-robot')" class="block w-full text-left py-2 px-4 mb-2 bg-yellow-600 hover:bg-yellow-700 rounded">Manage Robots</button>
+                <button onclick="showSection('manage-doctor')" class="block w-full text-left py-2 px-4 mb-2 bg-orange-600 hover:bg-orange-700 rounded">Manage Doctors</button>
+                <button onclick="scheduler.getQueueStats()" class="block w-full text-left py-2 px-4 mb-2 bg-indigo-600 hover:bg-indigo-700 rounded">Queue Statistics</button>
+                <button onclick="alert('Thank you for using Hospital Task Scheduler!')" class="block w-full text-left py-2 px-4 mb-2 bg-red-600 hover:bg-red-700 rounded">Exit</button>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 p-6">
+            <h1 class="text-3xl font-bold mb-6">Hospital Task Scheduler</h1>
+            <div class="bg-white shadow-md rounded-lg p-6">
+                <!-- Show Schedule Section -->
+                <div id="show-schedule" class="section">
+                    <h2 class="text-xl font-semibold mb-4">Show Schedule</h2>
+                    <div class="flex space-x-4 mb-4">
+                        <select id="schedule-day" class="w-full max-w-xs p-2 border rounded">
+                            <option value="">Select Day</option>
+                            <option value="Monday">Monday</option>
+                            <option value="Tuesday">Tuesday</option>
+                            <option value="Wednesday">Wednesday</option>
+                            <option value="Thursday">Thursday</option>
+                            <option value="Friday">Friday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
+                        </select>
+                        <button onclick="showDaySchedule()" class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-600">Show Schedule</button>
+                    </div>
+                    <div id="schedule-output" class="mt-4 overflow-x-auto">
+                        <table class="w-full border-collapse">
+                            <thead>
+                                <tr class="bg-gray-200">
+                                    <th class="border p-2">Task ID</th>
+                                    <th class="border p-2">Description</th>
+                                    <th class="border p-2">Priority</th>
+                                    <th class="border p-2">Score</th>
+                                    <th class="border p-2">Duration</th>
+                                    <th class="border p-2">Status</th>
+                                    <th class="border p-2">Doctor</th>
+                                    <th class="border p-2">Time</th>
+                                    <th class="border p-2">Day</th>
+                                </tr>
+                            </thead>
+                            <tbody id="schedule-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Add Task Section -->
+                <div id="add-task" class="section hidden">
+                    <h2 class="text-xl font-semibold mb-4">Add Task</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <input id="task-description" type="text" placeholder="Task Description" class="w-full p-2 border rounded">
+                            <p id="task-description-error" class="error-message hidden">Description is required</p>
+                        </div>
+                        <div>
+                            <input id="task-priority" type="number" min="1" max="5" placeholder="Priority (1-5)" class="w-full p-2 border rounded">
+                            <p id="task-priority-error" class="error-message hidden">Priority must be between 1 and 5</p>
+                        </div>
+                        <div>
+                            <input id="task-entry-time" type="text" placeholder="Entry Time (HH:MM)" class="w-full p-2 border rounded">
+                            <p id="task-entry-time-error" class="error-message hidden">Invalid time format (use HH:MM)</p>
+                        </div>
+                        <div>
+                            <select id="task-skill" class="w-full p-2 border rounded">
+                                <option value="">Select Skill</option>
+                                <option value="surgery">Surgery</option>
+                                <option value="checkup">Checkup</option>
+                                <option value="testing">Testing</option>
+                                <option value="emergency">Emergency</option>
+                                <option value="consultation">Consultation</option>
+                            </select>
+                            <p id="task-skill-error" class="error-message hidden">Skill is required</p>
+                        </div>
+                        <div>
+                            <select id="task-doctor" class="w-full p-2 border rounded">
+                                <option value="">Select Doctor</option>
+                            </select>
+                            <p id="task-doctor-error" class="error-message hidden">Doctor is required</p>
+                        </div>
+                        <div>
+                            <select id="task-day" class="w-full p-2 border rounded">
+                                <option value="">Select Day</option>
+                                <option value="Monday">Monday</option>
+                                <option value="Tuesday">Tuesday</option>
+                                <option value="Wednesday">Wednesday</option>
+                                <option value="Thursday">Thursday</option>
+                                <option value="Friday">Friday</option>
+                                <option value="Saturday">Saturday</option>
+                                <option value="Sunday">Sunday</option>
+                            </select>
+                            <p id="task-day-error" class="error-message hidden">Day is required</p>
+                        </div>
+                        <div>
+                            <input id="task-duration" type="number" placeholder="Duration (minutes)" value="30" class="w-full p-2 border rounded">
+                            <p id="task-duration-error" class="error-message hidden">Duration must be a positive number</p>
+                        </div>
+                        <div class="flex space-x-4">
+                            <button onclick="addTask()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Submit Task</button>
+                            <button onclick="clearTaskForm()" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Clear Form</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manage Robot Section -->
+                <div id="manage-robot" class="section hidden">
+                    <h2 class="text-xl font-semibold mb-4">Manage Robots</h2>
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="text-lg font-medium">Add Robot</h3>
+                            <input id="robot-name" type="text" placeholder="Robot Name" class="w-full p-2 border rounded mb-2">
+                            <input id="robot-skills" type="text" placeholder="Skills (comma separated)" class="w-full p-2 border rounded mb-2">
+                            <button onclick="addRobot()" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600">Add Robot</button>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-medium">Remove Robot</h3>
+                            <input id="remove-robot-name" type="text" placeholder="Robot Name" class="w-full p-2 border rounded mb-2">
+                            <button onclick="removeRobot()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Remove Robot</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manage Doctor Section -->
+                <div id="manage-doctor" class="section hidden">
+                    <h2 class="text-xl font-semibold mb-4">Manage Doctors</h2>
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="text-lg font-medium">Add Doctor</h3>
+                            <input id="doctor-name" type="text" placeholder="Doctor Name" class="w-full p-2 border rounded mb-2">
+                            <button onclick="addDoctor()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">Add Doctor</button>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-medium">Remove Doctor</h3>
+                            <input id="remove-doctor-name" type="text" placeholder="Doctor Name" class="w-full p-2 border rounded mb-2">
+                            <button onclick="removeDoctor()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Remove Doctor</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Output Area -->
+                <div id="output" class="mt-6 p-4 bg-gray-50 rounded border"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class TaskNode {
+            constructor(task_id, description, priority, entry_time, skill_required, doctor_assigned, day, duration = 30) {
+                this.task_id = task_id;
+                this.description = description;
+                this.priority = priority;
+                this.entry_time = this.parseTime(entry_time);
+                this.skill_required = skill_required;
+                this.doctor_assigned = doctor_assigned;
+                this.day = day;
+                this.duration = duration;
+                this.status = "Pending";
+                this.next = null;
+                this.position_score = this.calculatePositionScore();
+            }
+
+            parseTime(timeStr) {
+                const [hours, minutes] = timeStr.split(':').map(Number);
+                const date = new Date();
+                date.setHours(hours, minutes, 0, 0);
+                return date;
+            }
+
+            calculatePositionScore() {
+                const timeInMinutes = this.entry_time.getHours() * 60 + this.entry_time.getMinutes();
+                const priorityScore = (6 - this.priority) * 100;
+                const timeFactor = 1440 - timeInMinutes;
+                return priorityScore * 0.7 + timeFactor * 0.3;
+            }
+        }
+
+        class PriorityQueue {
+            constructor() {
+                this.head = null;
+                this.task_count = 0;
+            }
+
+            enqueue(task_node) {
+                this.task_count++;
+                if (!this.head || this.head.position_score < task_node.position_score) {
+                    task_node.next = this.head;
+                    this.head = task_node;
+                } else {
+                    let temp = this.head;
+                    while (temp.next && temp.next.position_score >= task_node.position_score) {
+                        temp = temp.next;
+                    }
+                    task_node.next = temp.next;
+                    temp.next = task_node;
+                }
+            }
+
+            dequeue() {
+                if (!this.head) {
+                    return null;
+                }
+                this.task_count--;
+                const highest_priority_task = this.head;
+                this.head = this.head.next;
+                return highest_priority_task;
+            }
+
+            showTasks(day = null, status = null) {
+                let tasks = [];
+                let temp = this.head;
+                while (temp) {
+                    if ((!day || temp.day === day) && (!status || temp.status === status)) {
+                        tasks.push(temp);
+                    }
+                    temp = temp.next;
+                }
+                return tasks;
+            }
+        }
+
+        class Robot {
+            constructor(name, skills, availability = true) {
+                this.name = name;
+                this.skills = skills;
+                this.availability = availability;
+                this.completed_tasks = [];
+                this.current_task = null;
+            }
+
+            canPerformTask(skill_required) {
+                return this.availability && this.skills.includes(skill_required);
+            }
+
+            assignTask(task) {
+                this.current_task = task;
+                this.availability = false;
+                task.status = "In Progress";
+            }
+
+            completeTask() {
+                if (this.current_task) {
+                    this.current_task.status = "Completed";
+                    this.completed_tasks.push(this.current_task);
+                    this.current_task = null;
+                    this.availability = true;
+                }
+            }
+        }
+
+        class Scheduler {
+            constructor() {
+                this.tasks = new PriorityQueue();
+                this.robots = [];
+                this.doctors = ["Dr. KP", "Dr. Sasank"];
+                this.task_counter = 0;
+                this.skills_available = ["surgery", "checkup", "testing", "emergency", "consultation"];
+                this.valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+                this.initializeDoctors();
+                this.initializeRobots();
+            }
+
+            initializeDoctors() {
+                const doctorSelect = document.getElementById('task-doctor');
+                doctorSelect.innerHTML = '<option value="">Select Doctor</option>';
+                this.doctors.forEach(doctor => {
+                    doctorSelect.innerHTML += `<option value="${doctor}">${doctor}</option>`;
+                });
+            }
+
+            initializeRobots() {
+                this.addRobot("Robo1", ["surgery", "emergency"]);
+                this.addRobot("Robo2", ["checkup", "testing"]);
+                this.addRobot("Robo3", ["testing", "consultation"]);
+            }
+
+            addRobot(name, skills) {
+                name = name.trim();
+                if (!name) {
+                    this.displayOutput("Error: Robot name is required.");
+                    return;
+                }
+                for (let skill of skills) {
+                    if (!this.skills_available.includes(skill)) {
+                        this.displayOutput(`Warning: ${skill} is not in recognized skills list`);
+                    }
+                }
+                this.robots.push(new Robot(name, skills));
+                this.displayOutput(`Robot ${name} added with skills: ${skills.join(", ")}`);
+            }
+
+            removeRobot(name) {
+                name = name.trim();
+                const robotIndex = this.robots.findIndex(robot => robot.name === name);
+                if (robotIndex === -1) {
+                    this.displayOutput("Robot not found!");
+                    return;
+                }
+                const robot = this.robots[robotIndex];
+                if (!robot.availability) {
+                    this.displayOutput(`Warning: Robot ${name} is currently busy with a task`);
+                    return;
+                }
+                this.robots.splice(robotIndex, 1);
+                this.displayOutput(`Robot ${name} removed!`);
+            }
+
+            addDoctor(name) {
+                name = name.trim();
+                if (!name) {
+                    this.displayOutput("Error: Doctor name is required.");
+                    return;
+                }
+                if (!this.doctors.includes(name)) {
+                    this.doctors.push(name);
+                    this.initializeDoctors();
+                    this.displayOutput(`Doctor ${name} added!`);
+                } else {
+                    this.displayOutput(`Error: Doctor ${name} already exists.`);
+                }
+            }
+
+            removeDoctor(name) {
+                name = name.trim();
+                let temp = this.tasks.head;
+                while (temp) {
+                    if (temp.doctor_assigned === name) {
+                        this.displayOutput(`Cannot remove ${name}. They have pending tasks!`);
+                        return;
+                    }
+                    temp = temp.next;
+                }
+                const index = this.doctors.indexOf(name);
+                if (index !== -1) {
+                    this.doctors.splice(index, 1);
+                    this.initializeDoctors();
+                    this.displayOutput(`Doctor ${name} removed!`);
+                } else {
+                    this.displayOutput("Doctor not found!");
+                }
+            }
+
+            addTask(description, priority, entry_time, skill_required, doctor_assigned, day, duration) {
+                if (!this.doctors.includes(doctor_assigned)) {
+                    this.displayOutput("Error: Doctor not found!");
+                    return false;
+                }
+                if (!this.skills_available.includes(skill_required)) {
+                    this.displayOutput(`Warning: ${skill_required} is not in recognized skills list`);
+                }
+                if (!/^\d{2}:\d{2}$/.test(entry_time)) {
+                    this.displayOutput("Error: Invalid time format! Use HH:MM");
+                    return false;
+                }
+                if (priority < 1 || priority > 5) {
+                    this.displayOutput("Error: Priority must be between 1 and 5");
+                    return false;
+                }
+                if (!description.trim()) {
+                    this.displayOutput("Error: Task description is required");
+                    return false;
+                }
+                if (!day || !this.valid_days.includes(day)) {
+                    this.displayOutput("Error: Day must be one of Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, or Sunday");
+                    return false;
+                }
+                if (duration <= 0) {
+                    this.displayOutput("Error: Duration must be a positive number");
+                    return false;
+                }
+                this.task_counter++;
+                const new_task = new TaskNode(this.task_counter, description, priority, entry_time, 
+                                             skill_required, doctor_assigned, day, duration);
+                this.tasks.enqueue(new_task);
+                this.displayOutput(`Task ${this.task_counter} added successfully with position score: ${new_task.position_score.toFixed(2)}`);
+                return true;
+            }
+
+            processTask() {
+                const task = this.tasks.dequeue();
+                if (task) {
+                    this.displayOutput(`
+                        Processing Task ${task.task_id}: ${task.description}<br>
+                        Priority: ${task.priority}, Position Score: ${task.position_score.toFixed(2)}<br>
+                        Required Skill: ${task.skill_required}`);
+                    task.status = "Completed";
+                } else {
+                    this.displayOutput("No tasks in queue!");
+                }
+            }
+
+            assignRobotToTask() {
+                const task = this.tasks.dequeue();
+                if (!task) {
+                    this.displayOutput("No tasks to assign!");
+                    return;
+                }
+                const available_robots = this.robots.filter(robot => robot.canPerformTask(task.skill_required));
+                if (available_robots.length > 0) {
+                    const robot = available_robots[0];
+                    robot.assignTask(task);
+                    this.displayOutput(`${robot.name} has been assigned to Task ${task.task_id}`);
+                } else {
+                    this.displayOutput(`No available robot with skill '${task.skill_required}'. Task re-added to queue.`);
+                    this.tasks.enqueue(task);
+                }
+            }
+
+            showDaySchedule(day) {
+                if (!day || !this.valid_days.includes(day)) {
+                    this.displayOutput("Error: Please select a valid day (Monday to Sunday).");
+                    return;
+                }
+                const tasks = this.tasks.showTasks(day);
+                const tableBody = document.getElementById('schedule-table-body');
+                tableBody.innerHTML = '';
+                if (tasks.length === 0) {
+                    this.displayOutput(`No tasks scheduled for ${day}.`);
+                    return;
+                }
+                tasks.forEach(task => {
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td class="border p-2">${task.task_id}</td>
+                            <td class="border p-2">${task.description}</td>
+                            <td class="border p-2">${task.priority}</td>
+                            <td class="border p-2">${task.position_score.toFixed(2)}</td>
+                            <td class="border p-2">${task.duration} mins</td>
+                            <td class="border p-2">${task.status}</td>
+                            <td class="border p-2">${task.doctor_assigned}</td>
+                            <td class="border p-2">${task.entry_time.toTimeString().slice(0, 5)}</td>
+                            <td class="border p-2">${task.day}</td>
+                        </tr>`;
+                });
+                this.displayOutput(`Schedule for ${day} displayed below.`);
+            }
+
+            getQueueStats() {
+                const stats = `
+                    <h3 class="text-lg font-semibold">Queue Statistics:</h3>
+                    <p><strong>Total tasks in queue:</strong> ${this.tasks.task_count}</p>
+                    <p><strong>Available robots:</strong> ${this.robots.filter(robot => robot.availability).length}</p>
+                    <p><strong>Total doctors:</strong> ${this.doctors.length}</p>`;
+                document.getElementById('output').innerHTML = stats;
+                document.getElementById('schedule-output').innerHTML = '';
+            }
+
+            displayOutput(message) {
+                const outputDiv = document.getElementById('output');
+                outputDiv.innerHTML = message;
+                outputDiv.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        const scheduler = new Scheduler();
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            document.getElementById(sectionId).classList.remove('hidden');
+            document.getElementById('output').innerHTML = '';
+            document.getElementById('schedule-table-body').innerHTML = '';
+        }
+
+        function validateTaskForm() {
+            let isValid = true;
+            const fields = [
+                { id: 'task-description', errorId: 'task-description-error', check: val => val.trim() !== '', message: 'Description is required' },
+                { id: 'task-priority', errorId: 'task-priority-error', check: val => val >= 1 && val <= 5, message: 'Priority must be between 1 and 5' },
+                { id: 'task-entry-time', errorId: 'task-entry-time-error', check: val => /^\d{2}:\d{2}$/.test(val), message: 'Invalid time format (use HH:MM)' },
+                { id: 'task-skill', errorId: 'task-skill-error', check: val => val !== '', message: 'Skill is required' },
+                { id: 'task-doctor', errorId: 'task-doctor-error', check: val => val !== '', message: 'Doctor is required' },
+                { id: 'task-day', errorId: 'task-day-error', check: val => val !== '', message: 'Day is required' },
+                { id: 'task-duration', errorId: 'task-duration-error', check: val => val > 0, message: 'Duration must be a positive number' }
+            ];
+
+            fields.forEach(field => {
+                const input = document.getElementById(field.id);
+                const error = document.getElementById(field.errorId);
+                const value = input.type === 'number' ? parseInt(input.value) : input.value;
+                if (!field.check(value)) {
+                    input.classList.add('invalid');
+                    error.classList.remove('hidden');
+                    error.textContent = field.message;
+                    isValid = false;
+                } else {
+                    input.classList.remove('invalid');
+                    error.classList.add('hidden');
+                }
+            });
+
+            return isValid;
+        }
+
+        function addTask() {
+            if (!validateTaskForm()) return;
+            const description = document.getElementById('task-description').value.trim();
+            const priority = parseInt(document.getElementById('task-priority').value);
+            const entry_time = document.getElementById('task-entry-time').value;
+            const skill_required = document.getElementById('task-skill').value;
+            const doctor_assigned = document.getElementById('task-doctor').value;
+            const day = document.getElementById('task-day').value;
+            const duration = parseInt(document.getElementById('task-duration').value);
+            if (scheduler.addTask(description, priority, entry_time, skill_required, doctor_assigned, day, duration)) {
+                clearTaskForm();
+            }
+        }
+
+        function clearTaskForm() {
+            document.getElementById('task-description').value = '';
+            document.getElementById('task-priority').value = '';
+            document.getElementById('task-entry-time').value = '';
+            document.getElementById('task-skill').value = '';
+            document.getElementById('task-doctor').value = '';
+            document.getElementById('task-day').value = '';
+            document.getElementById('task-duration').value = '30';
+            document.querySelectorAll('#add-task .invalid').forEach(input => input.classList.remove('invalid'));
+            document.querySelectorAll('#add-task .error-message').forEach(error => error.classList.add('hidden'));
+        }
+
+        function showDaySchedule() {
+            const day = document.getElementById('schedule-day').value;
+            scheduler.showDaySchedule(day);
+        }
+
+        function addRobot() {
+            const name = document.getElementById('robot-name').value.trim();
+            const skills = document.getElementById('robot-skills').value.split(',').map(skill => skill.trim()).filter(skill => skill);
+            if (!name) {
+                scheduler.displayOutput("Error: Robot name is required.");
+                return;
+            }
+            scheduler.addRobot(name, skills);
+            document.getElementById('robot-name').value = '';
+            document.getElementById('robot-skills').value = '';
+        }
+
+        function removeRobot() {
+            const name = document.getElementById('remove-robot-name').value.trim();
+            scheduler.removeRobot(name);
+            document.getElementById('remove-robot-name').value = '';
+        }
+
+        function addDoctor() {
+            const name = document.getElementById('doctor-name').value.trim();
+            scheduler.addDoctor(name);
+            document.getElementById('doctor-name').value = '';
+        }
+
+        function removeDoctor() {
+            const name = document.getElementById('remove-doctor-name').value.trim();
+            scheduler.removeDoctor(name);
+            document.getElementById('remove-doctor-name').value = '';
+        }
+
+        // Real-time form validation
+        document.querySelectorAll('#add-task input, #add-task select').forEach(input => {
+            input.addEventListener('input', () => {
+                validateTaskForm();
+            });
+        });
+    </script>
+</body>
+</html>

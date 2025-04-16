@@ -1,0 +1,785 @@
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Vector;
+
+class TaskNode {
+    int taskId;
+    String description;
+    int priority;
+    LocalTime entryTime;
+    String skillRequired;
+    String doctorAssigned;
+    String day;
+    int duration;  // Task duration in minutes
+    String status;
+    TaskNode next;
+    double positionScore;
+
+    public TaskNode(int taskId, String description, int priority, String entryTime,
+                    String skillRequired, String doctorAssigned, String day, int duration) {
+        this.taskId = taskId;
+        this.description = description;
+        this.priority = priority;
+        this.entryTime = LocalTime.parse(entryTime, DateTimeFormatter.ofPattern("HH:mm"));
+        this.skillRequired = skillRequired;
+        this.doctorAssigned = doctorAssigned;
+        this.day = day;
+        this.duration = duration;
+        this.status = "Pending";
+        this.next = null;
+        this.positionScore = calculatePositionScore();
+    }
+
+    private double calculatePositionScore() {
+        // Convert time to minutes for easier calculation (0-1440 minutes in a day)
+        int timeInMinutes = entryTime.getHour() * 60 + entryTime.getMinute();
+
+        // Priority score: inverse of priority (1-5) multiplied by 100 for weighting
+        // Lower priority number means higher importance (1 is highest priority)
+        double priorityScore = (6 - priority) * 100;
+
+        // Time factor: earlier times get higher scores
+        // We use 1440 (minutes in a day) minus the current time to give higher scores to earlier times
+        double timeFactor = 1440 - timeInMinutes;
+
+        // Combined score: weighted sum of priority and time
+        // Higher score = higher position in queue
+        return priorityScore * 0.7 + timeFactor * 0.3;
+    }
+}
+
+class PriorityQueue {
+    private TaskNode head;
+    private int taskCount;
+
+    public PriorityQueue() {
+        this.head = null;
+        this.taskCount = 0;
+    }
+
+    public void enqueue(TaskNode taskNode) {
+        taskCount++;
+
+        // If queue is empty or new task has higher score than head
+        if (head == null || head.positionScore < taskNode.positionScore) {
+            taskNode.next = head;
+            head = taskNode;
+        } else {
+            // Find the right position to insert based on position_score
+            TaskNode temp = head;
+            while (temp.next != null && temp.next.positionScore >= taskNode.positionScore) {
+                temp = temp.next;
+            }
+            taskNode.next = temp.next;
+            temp.next = taskNode;
+        }
+    }
+
+    public TaskNode dequeue() {
+        if (head == null) {
+            return null;
+        }
+        taskCount--;
+        TaskNode highestPriorityTask = head;
+        head = head.next;
+        return highestPriorityTask;
+    }
+
+    public List<TaskNode> getTasks(String day, String status) {
+        List<TaskNode> matchingTasks = new ArrayList<>();
+        TaskNode temp = head;
+
+        while (temp != null) {
+            if ((day == null || temp.day.equalsIgnoreCase(day)) &&
+                    (status == null || temp.status.equals(status))) {
+                matchingTasks.add(temp);
+            }
+            temp = temp.next;
+        }
+
+        return matchingTasks;
+    }
+
+    public int getTaskCount() {
+        return taskCount;
+    }
+
+    public TaskNode getHead() {
+        return head;
+    }
+}
+
+class Robot {
+    String name;
+    List<String> skills;
+    boolean availability;
+    List<TaskNode> completedTasks;
+    TaskNode currentTask;
+
+    public Robot(String name, List<String> skills) {
+        this.name = name;
+        this.skills = skills;
+        this.availability = true;
+        this.completedTasks = new ArrayList<>();
+        this.currentTask = null;
+    }
+
+    public boolean canPerformTask(String skillRequired) {
+        return availability && skills.contains(skillRequired);
+    }
+
+    public void assignTask(TaskNode task) {
+        this.currentTask = task;
+        this.availability = false;
+        task.status = "In Progress";
+    }
+
+    public void completeTask() {
+        if (currentTask != null) {
+            currentTask.status = "Completed";
+            completedTasks.add(currentTask);
+            currentTask = null;
+            availability = true;
+        }
+    }
+}
+
+class Scheduler {
+    private PriorityQueue tasks;
+    private List<Robot> robots;
+    private List<String> doctors;
+    private int taskCounter;
+    private List<String> skillsAvailable;
+
+    public Scheduler() {
+        this.tasks = new PriorityQueue();
+        this.robots = new ArrayList<>();
+        this.doctors = new ArrayList<>();
+        doctors.add("Dr. KP");
+        doctors.add("Dr. Sasank");
+        this.taskCounter = 0;
+        this.skillsAvailable = new ArrayList<>();
+        skillsAvailable.add("surgery");
+        skillsAvailable.add("checkup");
+        skillsAvailable.add("testing");
+        skillsAvailable.add("emergency");
+        skillsAvailable.add("consultation");
+    }
+
+    public void addRobot(String name, List<String> skills) {
+        for (String skill : skills) {
+            if (!skillsAvailable.contains(skill)) {
+                // Warning message will be handled in GUI
+            }
+        }
+        robots.add(new Robot(name, skills));
+    }
+
+    public String removeRobot(String name) {
+        for (int i = 0; i < robots.size(); i++) {
+            if (robots.get(i).name.equals(name)) {
+                if (!robots.get(i).availability) {
+                    return "Warning: Robot " + name + " is currently busy with a task";
+                }
+                robots.remove(i);
+                return "Robot " + name + " removed!";
+            }
+        }
+        return "Robot not found!";
+    }
+
+    public String addDoctor(String name) {
+        if (!doctors.contains(name)) {
+            doctors.add(name);
+            return "Doctor " + name + " added!";
+        }
+        return "Doctor already exists!";
+    }
+
+    public String removeDoctor(String name) {
+        boolean tasksAffected = false;
+        TaskNode temp = tasks.getHead();
+
+        while (temp != null) {
+            if (temp.doctorAssigned.equals(name)) {
+                tasksAffected = true;
+                break;
+            }
+            temp = temp.next;
+        }
+
+        if (tasksAffected) {
+            return "Cannot remove " + name + ". They have pending tasks!";
+        }
+
+        if (doctors.contains(name)) {
+            doctors.remove(name);
+            return "Doctor " + name + " removed!";
+        } else {
+            return "Doctor not found!";
+        }
+    }
+
+    public String addTask(String description, int priority, String entryTime, String skillRequired,
+                          String doctorAssigned, String day, int duration) {
+        if (!doctors.contains(doctorAssigned)) {
+            return "Error: Doctor not found!";
+        }
+
+        String warning = "";
+        if (!skillsAvailable.contains(skillRequired)) {
+            warning = "Warning: " + skillRequired + " is not in recognized skills list. ";
+        }
+
+        try {
+            LocalTime.parse(entryTime, DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException e) {
+            return "Error: Invalid time format! Use HH:MM";
+        }
+
+        if (priority < 1 || priority > 5) {
+            return "Error: Priority must be between 1 and 5";
+        }
+
+        taskCounter++;
+        TaskNode newTask = new TaskNode(taskCounter, description, priority, entryTime,
+                skillRequired, doctorAssigned, day, duration);
+        tasks.enqueue(newTask);
+        return warning + "Task " + taskCounter + " added successfully with position score: " +
+                String.format("%.2f", newTask.positionScore);
+    }
+
+    public String processTask() {
+        TaskNode task = tasks.dequeue();
+        if (task != null) {
+            task.status = "Completed";
+            return "Processed Task " + task.taskId + ": " + task.description +
+                    "\nPriority: " + task.priority + ", Position Score: " +
+                    String.format("%.2f", task.positionScore) +
+                    "\nRequired Skill: " + task.skillRequired;
+        }
+        return "No tasks in queue!";
+    }
+
+    public String assignRobotToTask() {
+        TaskNode task = tasks.dequeue();
+        if (task == null) {
+            return "No tasks to assign!";
+        }
+
+        Robot availableRobot = null;
+        for (Robot robot : robots) {
+            if (robot.canPerformTask(task.skillRequired)) {
+                availableRobot = robot;
+                break;
+            }
+        }
+
+        if (availableRobot != null) {
+            availableRobot.assignTask(task);
+            return availableRobot.name + " has been assigned to Task " + task.taskId;
+        }
+
+        tasks.enqueue(task);
+        return "No available robot with skill '" + task.skillRequired + "'. Task re-added to queue.";
+    }
+
+    public List<TaskNode> getTasksForDay(String day) {
+        return tasks.getTasks(day, null);
+    }
+
+    public String getQueueStats() {
+        int availableRobots = 0;
+        for (Robot robot : robots) {
+            if (robot.availability) {
+                availableRobots++;
+            }
+        }
+
+        return "Total tasks in queue: " + tasks.getTaskCount() +
+                "\nAvailable robots: " + availableRobots +
+                "\nTotal doctors: " + doctors.size();
+    }
+
+    // Getter methods to access private fields
+    public List<String> getAvailableSkills() {
+        return new ArrayList<>(skillsAvailable);
+    }
+
+    public List<String> getAvailableDoctors() {
+        return new ArrayList<>(doctors);
+    }
+
+    public List<Robot> getRobots() {
+        return new ArrayList<>(robots);
+    }
+}
+
+public class HospitalTaskScheduler extends JFrame {
+    private Scheduler scheduler;
+    private JTabbedPane tabbedPane;
+    private JPanel mainPanel;
+    private JTable taskTable;
+    private DefaultTableModel taskTableModel;
+    private JTextArea logArea;
+
+    public HospitalTaskScheduler() {
+        scheduler = new Scheduler();
+
+        // Initialize with some robots
+        List<String> robo1Skills = new ArrayList<>();
+        robo1Skills.add("surgery");
+        robo1Skills.add("emergency");
+        scheduler.addRobot("Robo1", robo1Skills);
+
+        List<String> robo2Skills = new ArrayList<>();
+        robo2Skills.add("checkup");
+        robo2Skills.add("testing");
+        scheduler.addRobot("Robo2", robo2Skills);
+
+        List<String> robo3Skills = new ArrayList<>();
+        robo3Skills.add("testing");
+        robo3Skills.add("consultation");
+        scheduler.addRobot("Robo3", robo3Skills);
+
+        initializeUI();
+    }
+
+    private void initializeUI() {
+        setTitle("Hospital Task Scheduler");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(800, 600);
+        setLocationRelativeTo(null);
+
+        mainPanel = new JPanel(new BorderLayout());
+
+        // Create tabbed pane
+        tabbedPane = new JTabbedPane();
+
+        // Add Task tab
+        tabbedPane.addTab("Add Task", createAddTaskPanel());
+
+        // Manage Tasks tab
+        tabbedPane.addTab("Manage Tasks", createManageTasksPanel());
+
+        // Manage Robots tab
+        tabbedPane.addTab("Manage Robots", createManageRobotsPanel());
+
+        // Manage Doctors tab
+        tabbedPane.addTab("Manage Doctors", createManageDoctorsPanel());
+
+        // Statistics tab
+        tabbedPane.addTab("Statistics", createStatisticsPanel());
+
+        mainPanel.add(tabbedPane, BorderLayout.CENTER);
+
+        // Log area
+        logArea = new JTextArea(5, 50);
+        logArea.setEditable(false);
+        JScrollPane logScrollPane = new JScrollPane(logArea);
+        mainPanel.add(logScrollPane, BorderLayout.SOUTH);
+
+        add(mainPanel);
+    }
+
+    private JPanel createAddTaskPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
+
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        // Description
+        JLabel descLabel = new JLabel("Description:");
+        JTextField descField = new JTextField(20);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        formPanel.add(descLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(descField, gbc);
+
+        // Priority
+        JLabel priorityLabel = new JLabel("Priority (1-5):");
+        String[] priorities = {"1", "2", "3", "4", "5"};
+        JComboBox<String> priorityCombo = new JComboBox<>(priorities);
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        formPanel.add(priorityLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(priorityCombo, gbc);
+
+        // Entry Time
+        JLabel timeLabel = new JLabel("Entry Time (HH:MM):");
+        JTextField timeField = new JTextField(10);
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        formPanel.add(timeLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(timeField, gbc);
+
+        // Skill
+        JLabel skillLabel = new JLabel("Required Skill:");
+        JComboBox<String> skillCombo = new JComboBox<>(
+                scheduler.getAvailableSkills().toArray(new String[0]));
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        formPanel.add(skillLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(skillCombo, gbc);
+
+        // Doctor
+        JLabel doctorLabel = new JLabel("Assign Doctor:");
+        JComboBox<String> doctorCombo = new JComboBox<>(
+                scheduler.getAvailableDoctors().toArray(new String[0]));
+        gbc.gridx = 0;
+        gbc.gridy = 4;
+        formPanel.add(doctorLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(doctorCombo, gbc);
+
+        // Day
+        JLabel dayLabel = new JLabel("Day:");
+        String[] days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+        JComboBox<String> dayCombo = new JComboBox<>(days);
+        gbc.gridx = 0;
+        gbc.gridy = 5;
+        formPanel.add(dayLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(dayCombo, gbc);
+
+        // Duration
+        JLabel durationLabel = new JLabel("Duration (minutes):");
+        JSpinner durationSpinner = new JSpinner(new SpinnerNumberModel(30, 5, 240, 5));
+        gbc.gridx = 0;
+        gbc.gridy = 6;
+        formPanel.add(durationLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(durationSpinner, gbc);
+
+        // Add Task button
+        JButton addButton = new JButton("Add Task");
+        gbc.gridx = 0;
+        gbc.gridy = 7;
+        gbc.gridwidth = 2;
+        gbc.anchor = GridBagConstraints.CENTER;
+        formPanel.add(addButton, gbc);
+
+        // Handle add task button click
+        addButton.addActionListener(e -> {
+            try {
+                String description = descField.getText();
+                int priority = Integer.parseInt((String)priorityCombo.getSelectedItem());
+                String entryTime = timeField.getText();
+                String skillRequired = (String)skillCombo.getSelectedItem();
+                String doctorAssigned = (String)doctorCombo.getSelectedItem();
+                String day = (String)dayCombo.getSelectedItem();
+                int duration = (Integer)durationSpinner.getValue();
+
+                String result = scheduler.addTask(description, priority, entryTime,
+                        skillRequired, doctorAssigned, day, duration);
+                logArea.append(result + "\n");
+
+                // Reset form
+                descField.setText("");
+                timeField.setText("");
+
+                // Refresh task table
+                refreshTaskTable();
+
+            } catch (Exception ex) {
+                logArea.append("Error: " + ex.getMessage() + "\n");
+            }
+        });
+
+        JScrollPane scrollPane = new JScrollPane(formPanel);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private JPanel createManageTasksPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+
+        // Create table to display tasks
+        String[] columnNames = {"ID", "Description", "Priority", "Time", "Skill", "Doctor", "Day", "Duration", "Status", "Score"};
+        taskTableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        taskTable = new JTable(taskTableModel);
+        JScrollPane scrollPane = new JScrollPane(taskTable);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        // Create buttons panel
+        JPanel buttonsPanel = new JPanel();
+
+        // Filter by day
+        JLabel dayFilterLabel = new JLabel("Filter by Day:");
+        String[] days = {"All", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+        JComboBox<String> dayFilterCombo = new JComboBox<>(days);
+        buttonsPanel.add(dayFilterLabel);
+        buttonsPanel.add(dayFilterCombo);
+
+        dayFilterCombo.addActionListener(e -> {
+            String selectedDay = (String)dayFilterCombo.getSelectedItem();
+            if (selectedDay.equals("All")) {
+                refreshTaskTable();
+            } else {
+                refreshTaskTable(selectedDay);
+            }
+        });
+
+        // Process task
+        JButton processButton = new JButton("Process Task");
+        buttonsPanel.add(processButton);
+
+        processButton.addActionListener(e -> {
+            String result = scheduler.processTask();
+            logArea.append(result + "\n");
+            refreshTaskTable();
+        });
+
+        // Assign robot
+        JButton assignButton = new JButton("Assign Robot");
+        buttonsPanel.add(assignButton);
+
+        assignButton.addActionListener(e -> {
+            String result = scheduler.assignRobotToTask();
+            logArea.append(result + "\n");
+            refreshTaskTable();
+        });
+
+        panel.add(buttonsPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    private JPanel createManageRobotsPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+
+        // Robot list
+        DefaultListModel<String> robotListModel = new DefaultListModel<>();
+        for (Robot robot : scheduler.getRobots()) {
+            robotListModel.addElement(robot.name + " - Skills: " + String.join(", ", robot.skills));
+        }
+        JList<String> robotList = new JList<>(robotListModel);
+        JScrollPane scrollPane = new JScrollPane(robotList);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        // Form to add/remove robots
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        // Robot name
+        JLabel nameLabel = new JLabel("Robot Name:");
+        JTextField nameField = new JTextField(15);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        formPanel.add(nameLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(nameField, gbc);
+
+        // Skills
+        JLabel skillsLabel = new JLabel("Skills (comma separated):");
+        JTextField skillsField = new JTextField(15);
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        formPanel.add(skillsLabel, gbc);
+        gbc.gridx = 1;
+        formPanel.add(skillsField, gbc);
+
+        // Available skills
+        JLabel availableLabel = new JLabel("Available skills: " +
+                String.join(", ", scheduler.getAvailableSkills()));
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        formPanel.add(availableLabel, gbc);
+
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton addButton = new JButton("Add Robot");
+        JButton removeButton = new JButton("Remove Robot");
+        buttonPanel.add(addButton);
+        buttonPanel.add(removeButton);
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 2;
+        formPanel.add(buttonPanel, gbc);
+
+        // Add robot action
+        addButton.addActionListener(e -> {
+            String name = nameField.getText();
+            String[] skillsArray = skillsField.getText().split(",");
+            List<String> skills = new ArrayList<>();
+
+            for (String skill : skillsArray) {
+                skills.add(skill.trim());
+            }
+
+            scheduler.addRobot(name, skills);
+            logArea.append("Robot " + name + " added with skills: " + skills + "\n");
+
+            // Update robot list
+            robotListModel.addElement(name + " - Skills: " + String.join(", ", skills));
+
+            // Clear fields
+            nameField.setText("");
+            skillsField.setText("");
+        });
+
+        // Remove robot action
+        removeButton.addActionListener(e -> {
+            String name = nameField.getText();
+            String result = scheduler.removeRobot(name);
+            logArea.append(result + "\n");
+
+            // Update robot list
+            for (int i = 0; i < robotListModel.size(); i++) {
+                if (robotListModel.get(i).startsWith(name + " - ")) {
+                    robotListModel.remove(i);
+                    break;
+                }
+            }
+
+            // Clear field
+            nameField.setText("");
+        });
+
+        panel.add(formPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    private JPanel createManageDoctorsPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+
+        // Doctor list
+        DefaultListModel<String> doctorListModel = new DefaultListModel<>();
+        for (String doctor : scheduler.getAvailableDoctors()) {
+            doctorListModel.addElement(doctor);
+        }
+        JList<String> doctorList = new JList<>(doctorListModel);
+        JScrollPane scrollPane = new JScrollPane(doctorList);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        // Form to add/remove doctors
+        JPanel formPanel = new JPanel(new FlowLayout());
+
+        JLabel nameLabel = new JLabel("Doctor Name:");
+        JTextField nameField = new JTextField(15);
+        JButton addButton = new JButton("Add Doctor");
+        JButton removeButton = new JButton("Remove Doctor");
+
+        formPanel.add(nameLabel);
+        formPanel.add(nameField);
+        formPanel.add(addButton);
+        formPanel.add(removeButton);
+
+        // Add doctor action
+        addButton.addActionListener(e -> {
+            String name = nameField.getText();
+            String result = scheduler.addDoctor(name);
+            logArea.append(result + "\n");
+
+            // Update doctor list and comboboxes
+            doctorListModel.addElement(name);
+
+            // Clear field
+            nameField.setText("");
+        });
+
+        // Remove doctor action
+        removeButton.addActionListener(e -> {
+            String name = nameField.getText();
+            String result = scheduler.removeDoctor(name);
+            logArea.append(result + "\n");
+
+            // Update doctor list if successful
+            if (result.contains("removed")) {
+                doctorListModel.removeElement(name);
+            }
+
+            // Clear field
+            nameField.setText("");
+        });
+
+        panel.add(formPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    private JPanel createStatisticsPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+
+        JTextArea statsArea = new JTextArea();
+        statsArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(statsArea);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        JButton refreshButton = new JButton("Refresh Statistics");
+        panel.add(refreshButton, BorderLayout.SOUTH);
+
+        refreshButton.addActionListener(e -> {
+            statsArea.setText(scheduler.getQueueStats());
+        });
+
+        return panel;
+    }
+
+    private void refreshTaskTable() {
+        refreshTaskTable(null);
+    }
+
+    private void refreshTaskTable(String day) {
+        // Clear table
+        taskTableModel.setRowCount(0);
+
+        // Get tasks for day
+        List<TaskNode> tasks = day == null ?
+                scheduler.getTasksForDay(null) : scheduler.getTasksForDay(day);
+
+        // Populate table
+        for (TaskNode task : tasks) {
+            Vector<Object> row = new Vector<>();
+            row.add(task.taskId);
+            row.add(task.description);
+            row.add(task.priority);
+            row.add(task.entryTime.format(DateTimeFormatter.ofPattern("HH:mm")));
+            row.add(task.skillRequired);
+            row.add(task.doctorAssigned);
+            row.add(task.day);
+            row.add(task.duration);
+            row.add(task.status);
+            row.add(String.format("%.2f", task.positionScore));
+            taskTableModel.addRow(row);
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            // Set system look and feel
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            HospitalTaskScheduler app = new HospitalTaskScheduler();
+            app.setVisible(true);
+        });
+    }
+}
